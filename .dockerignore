@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.git/
+.gitignore
+.cowork-temp/
+.openclaw/
+tests/
+示例报告.md
+示例数据.csv
+预览_*.png
+deploy.py
+start.sh
+一键启动.bat

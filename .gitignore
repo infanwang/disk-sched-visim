@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.cowork-temp/
+.openclaw/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+out.txt
+*.log

@@ -1,0 +1,25 @@
+name: disk-sched
+
+services:
+  disk-sched:
+    build:
+      context: .
+    image: disk-sched:1.1
+    container_name: disk-sched
+    ports:
+      - "${DS_PORT:-8765}:8765"
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    labels:
+      - "traefik.enable=false"

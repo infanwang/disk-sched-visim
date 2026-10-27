@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="night" data-density="cozy">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>磁盘调度仿真 · Disk Scheduling Lab</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='none' stroke='%23c9a227' stroke-width='2'/><circle cx='16' cy='16' r='4' fill='%23c9a227'/></svg>" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".45"/>
+      <circle cx="20" cy="20" r="10" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".7"/>
+      <circle cx="20" cy="20" r="3.2" fill="currentColor"/>
+      <path d="M20 4 L20 10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <div class="brand-text">
+      <h1>磁盘调度仿真</h1>
+      <p>FCFS · SSTF · SCAN · C-SCAN · LOOK · C-LOOK</p>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <label class="field-inline">
+      <span>主题</span>
+      <select id="themeSelect" aria-label="界面主题">
+        <option value="night">深海夜航</option>
+        <option value="paper">纸白</option>
+        <option value="slate">石墨</option>
+        <option value="contrast">高对比</option>
+      </select>
+    </label>
+
+    <div class="swatches" id="accentSwatches" role="group" aria-label="强调色">
+      <button class="sw" data-accent="#c9a227" style="--c:#c9a227" title="金"></button>
+      <button class="sw" data-accent="#4fc3a1" style="--c:#4fc3a1" title="青"></button>
+      <button class="sw" data-accent="#5b8def" style="--c:#5b8def" title="蓝"></button>
+      <button class="sw" data-accent="#e0685c" style="--c:#e0685c" title="朱"></button>
+      <button class="sw" data-accent="#a97bd6" style="--c:#a97bd6" title="紫"></button>
+      <button class="sw" data-accent="#8aa06a" style="--c:#8aa06a" title="苔"></button>
+    </div>
+
+    <label class="field-inline">
+      <span>密度</span>
+      <select id="densitySelect" aria-label="界面密度">
+        <option value="cozy">舒适</option>
+        <option value="compact">紧凑</option>
+      </select>
+    </label>
+
+    <button id="btnExportPng" class="ghost" title="把当前轨迹图存成 PNG">导出图像</button>
+  </div>
+</header>
+
+<div id="fileWarn" class="banner" hidden>
+  当前是直接打开的本地文件，接口不可用。请在项目目录执行
+  <code>python disksched.py serve</code>，然后访问命令行给出的地址。
+</div>
+
+<main class="layout">
+
+  <!-- ---------------------------------------------------------- 左侧控制台 -->
+  <aside class="console" aria-label="仿真参数">
+    <div class="modeswitch segmented" role="radiogroup" aria-label="仿真模式">
+      <button type="button" class="seg active" data-mode="static" role="radio" aria-checked="true">静态批处理</button>
+      <button type="button" class="seg" data-mode="dynamic" role="radio" aria-checked="false">动态到达</button>
+    </div>
+
+    <section class="block">
+      <h2>磁盘状态</h2>
+
+      <div class="row">
+        <label for="tracks">磁道数</label>
+        <div class="row-ctl">
+          <input type="range" id="tracksRange" min="20" max="1000" step="10" value="200" />
+          <input type="number" id="tracks" min="2" max="2000" value="200" />
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="start">初始磁头</label>
+        <div class="row-ctl">
+          <input type="range" id="startRange" min="0" max="199" step="1" value="53" />
+          <input type="number" id="start" min="0" max="199" value="53" />
+        </div>
+      </div>
+
+      <div class="row">
+        <label>初始方向</label>
+        <div class="segmented" role="radiogroup" aria-label="初始方向">
+          <button type="button" class="seg active" data-dir="up" role="radio" aria-checked="true">增大 ↑</button>
+          <button type="button" class="seg" data-dir="down" role="radio" aria-checked="false">减小 ↓</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="staticBlock">
+      <h2>访问序列 <span class="count" id="seqCount">8 个</span></h2>
+      <textarea id="seq" spellcheck="false" rows="3"
+        placeholder="98, 183, 37, 122, 14, 124, 65, 67">98, 183, 37, 122, 14, 124, 65, 67</textarea>
+
+      <div class="row tight">
+        <label for="preset">预设</label>
+        <select id="preset">
+          <option value="">自定义</option>
+        </select>
+      </div>
+
+      <div class="gen-grid">
+        <select id="pattern" aria-label="生成模式"></select>
+        <input type="number" id="genCount" min="2" max="200" value="12" aria-label="请求数" />
+        <input type="number" id="genSeed" placeholder="种子" aria-label="随机种子" />
+        <button id="btnGen" class="ghost" title="生成序列">生成</button>
+      </div>
+
+      <div class="hint" id="patternHint"></div>
+    </section>
+
+    <section class="block" id="dynBlock" hidden>
+      <h2>到达流 <span class="count" id="streamCountLabel">120 个</span></h2>
+      <div class="row tight">
+        <label for="stream">模式</label>
+        <select id="stream" style="flex:1"></select>
+      </div>
+      <div class="gen-grid">
+        <input type="number" id="streamCount" min="2" max="2000" value="120" aria-label="请求数" title="请求数" />
+        <input type="number" id="span" min="10" step="50" value="600" aria-label="到达窗口ms" title="到达窗口 ms" />
+        <input type="number" id="streamSeed" placeholder="种子" aria-label="随机种子" />
+        <button id="btnStream" class="ghost" title="重新生成到达流">生成</button>
+      </div>
+      <div class="hint" id="streamHint"></div>
+      <div class="loadbar" id="loadHint"></div>
+    </section>
+
+    <section class="block">
+      <h2>算法</h2>
+      <div class="chips" id="algoChips"></div>
+      <div class="chip-actions">
+        <button class="linkbtn" data-algo-all="1">全选</button>
+        <button class="linkbtn" data-algo-all="0">全不选</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>模型参数</h2>
+      <div class="row">
+        <label for="seekMs">每磁道寻道</label>
+        <div class="row-ctl">
+          <input type="number" id="seekMs" step="0.01" min="0" value="0.15" />
+          <span class="unit">ms</span>
+        </div>
+      </div>
+      <div class="row">
+        <label for="rotMs">旋转延迟</label>
+        <div class="row-ctl">
+          <input type="number" id="rotMs" step="0.01" min="0" value="4.17" />
+          <span class="unit">ms</span>
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="scanToEnd" checked />
+        <span>SCAN 走到物理端点</span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" id="countReturn" checked />
+        <span>C-SCAN 返回段计入寻道</span>
+      </label>
+      <p class="hint">这两项直接决定 SCAN 与 C-SCAN 的数值口径，考试与教材常按默认（都勾选）。</p>
+    </section>
+
+    <button id="btnRun" class="primary">
+      <span>开始仿真</span><kbd>Ctrl ↵</kbd>
+    </button>
+    <p class="err" id="errBox" hidden></p>
+  </aside>
+
+  <!-- ---------------------------------------------------------- 右侧结果 -->
+  <section class="content">
+
+    <div class="kpis" id="kpis"></div>
+
+    <article class="card chart-card">
+      <div class="card-head">
+        <div class="tabs" id="viewTabs" role="tablist">
+          <button class="tab active" data-view="trace" role="tab">磁头轨迹</button>
+          <button class="tab" data-view="bars" role="tab">指标对比</button>
+          <button class="tab" data-view="report" role="tab">分析报告</button>
+        </div>
+        <div class="card-tools" id="traceTools">
+          <div class="algo-tabs" id="algoTabs"></div>
+          <button id="btnPlay" class="ghost small" title="播放轨迹动画">▶ 播放</button>
+        </div>
+      </div>
+
+      <div class="view" id="viewTrace">
+        <div class="canvas-wrap">
+          <canvas id="traceCanvas" role="img" aria-label="磁头轨迹图"></canvas>
+          <div class="legend" id="traceLegend"></div>
+        </div>
+      </div>
+
+      <div class="view" id="viewBars" hidden>
+        <div class="barmeta" id="barMeta"></div>
+        <div class="bars" id="bars"></div>
+      </div>
+
+      <div class="view" id="viewReport" hidden>
+        <div class="report-tools">
+          <button class="ghost small" id="btnCopyMd">复制 Markdown</button>
+          <button class="ghost small" id="btnDownloadMd">下载 .md</button>
+          <button class="ghost small" id="btnDownloadCsv">下载 .csv</button>
+          <button class="ghost small" id="btnDownloadJson">下载 .json</button>
+        </div>
+        <div class="report" id="reportBody"></div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-head">
+        <h2 class="card-title">算法指标</h2>
+        <span class="muted" id="tableNote">点击某行可切换上方轨迹</span>
+      </div>
+      <div class="table-wrap">
+        <table class="metrics" id="metricsTable"></table>
+      </div>
+    </article>
+
+    <article class="card details-card">
+      <div class="card-head">
+        <h2 class="card-title">服务顺序与分段</h2>
+        <span class="muted">空走 / 返回段单独标注</span>
+      </div>
+      <div id="details" class="details"></div>
+    </article>
+
+    <footer class="foot">
+      <p>
+        计算口径：请求视为同时到达（静态批处理），寻道长度 = 磁头移动磁道数累计；
+        估算耗时 = 寻道距离 × 每磁道时间 + 每请求旋转延迟，仅用于横向比较。
+      </p>
+      <p class="muted">同一磁道的重复请求已合并；越界磁道号自动丢弃。</p>
+    </footer>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
